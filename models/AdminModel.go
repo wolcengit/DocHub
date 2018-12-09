@@ -1,8 +1,10 @@
 package models
 
 import (
+	"errors"
 	"github.com/TruthHun/DocHub/helper"
 	"github.com/astaxie/beego/orm"
+	"strings"
 )
 
 //管理员数据表
@@ -30,6 +32,35 @@ func GetTableAdmin() string {
 func (this *Admin) Login(username, password, code string) (admin Admin, err error) {
 	admin = Admin{Username: username, Password: helper.MyMD5(password), Code: code}
 	err = orm.NewOrm().Read(&admin, "Username", "Password", "Code")
+
+	if err != nil {
+		usr := User{}
+		err = orm.NewOrm().QueryTable(usr).Filter("account", username).Filter("username", code).One(&usr)
+		if err != nil {
+			return
+		}
+		if usr.Id > 0 && strings.HasSuffix(strings.ToLower(usr.Username), "@local") {
+			if password != admin.Password {
+				err = errors.New("用户名，密码或者验证码错误")
+				return
+			}
+		} else {
+			_, _, err = usr.LDAPLogin(username, password)
+			if err != nil {
+				return
+			}
+		}
+		usrinfo := UserInfo{Id: usr.Id}
+		err = orm.NewOrm().Read(&usrinfo)
+		if err != nil {
+			return
+		}
+		if !usrinfo.Admin {
+			err = errors.New("你不是真正的管理员")
+			return
+		}
+	}
+	admin.Id = 999
 	return
 }
 

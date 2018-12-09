@@ -7,13 +7,16 @@ import (
 	"strings"
 
 	"github.com/TruthHun/DocHub/helper"
+	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
+	"gopkg.in/ldap.v2"
 	"time"
 )
 
 //用户表
 type User struct {
 	Id       int    `orm:"column(Id)"`
+	Account  string `orm:"size(50);unique;column(Account)"`          //账户
 	Email    string `orm:"size(50);unique;column(Email);default();"` //邮箱
 	Password string `orm:"size(32);column(Password)"`                //密码
 	Username string `orm:"size(16);unique;column(Username)"`         //用户名
@@ -37,6 +40,7 @@ type UserInfo struct {
 	Collect    int  `orm:"default(0);column(Collect)"`        //收藏专辑数量，每个收藏专辑下面有文档
 	TimeCreate int  `orm:"column(TimeCreate);default(0)"`     //用户注册时间
 	Status     bool `orm:"column(Status);default(true)"`      //用户信息状态，false(即0)表示被禁用
+	Admin      bool `orm:"column(Admin);default(false)"`      //IsAdmin
 }
 
 func NewUserInfo() *UserInfo {
@@ -112,6 +116,7 @@ func (u *User) GetUserField(cond *orm.Condition) (user User) {
 }
 
 //用户注册
+//@param            account           string        账户
 //@param            email           string          邮箱
 //@param            username        string          用户名
 //@param            password        string          密码
@@ -119,7 +124,7 @@ func (u *User) GetUserField(cond *orm.Condition) (user User) {
 //@param            intro           string          签名
 //@return                           error           错误
 //@return                           int             注册成功时返回注册id
-func (u *User) Reg(email, username, password, repassword, intro string) (error, int) {
+func (u *User) Reg(account, email, username, password, repassword, intro string) (error, int) {
 	var (
 		user User
 		o    = orm.NewOrm()
@@ -137,7 +142,7 @@ func (u *User) Reg(email, username, password, repassword, intro string) (error, 
 	if pwd != helper.MyMD5(repassword) {
 		return errors.New("密码和确认密码不一致"), 0
 	}
-	user = User{Email: email, Username: username, Password: pwd, Intro: intro}
+	user = User{Account: account, Email: email, Username: username, Password: pwd, Intro: intro}
 	_, err := o.Insert(&user)
 	if user.Id > 0 {
 		//coin := beego.AppConfig.DefaultInt("coinreg", 10)
@@ -169,4 +174,62 @@ func (this *User) GetById(id interface{}) (params orm.Params, rows int64, err er
 		}
 	}
 	return
+}
+
+//
+// 使用LDAP进行登录
+//
+func (u *User) LDAPLogin(account, password string) (params []orm.Params, totalRows int, err error) {
+
+	if beego.AppConfig.DefaultBool("ldap::enable", false) == false {
+		return params, totalRows, errors.New("没有启用LDAP服务器")
+	}
+	addr := fmt.Sprintf("%s:%d", beego.AppConfig.String("ldap::host"), beego.AppConfig.DefaultInt("ldap::port", 3268))
+	lc, err := ldap.Dial("tcp", addr)
+	if err != nil {
+		return params, totalRows, errors.New("无法连接到LDAP服务器")
+	}
+	defer lc.Close()
+	err = lc.Bind(beego.AppConfig.String("ldap::user"), beego.AppConfig.String("ldap::password"))
+	if err != nil {
+		return params, totalRows, errors.New("第一次LDAP绑定失败")
+	}
+	searchRequest := ldap.NewSearchRequest(
+		beego.AppConfig.String("ldap::base"),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		//修改objectClass通过配置文件获取值
+		fmt.Sprintf("(&(%s)(%s=%s))", beego.AppConfig.String("ldap::filter"), beego.AppConfig.String("ldap::attribute"), account),
+		[]string{"dn", "mail", "displayName"},
+		nil,
+	)
+	searchResult, err := lc.Search(searchRequest)
+	if err != nil {
+		return params, totalRows, errors.New("LDAP搜索失败")
+	}
+	if len(searchResult.Entries) != 1 {
+		return params, totalRows, errors.New("LDAP用户不存在或者多于一个")
+	}
+	userdn := searchResult.Entries[0].DN
+	err = lc.Bind(userdn, password)
+	if err != nil {
+		return params, totalRows, errors.New("用户密码错误")
+	}
+	if u.Id == 0 {
+		ldapMail := searchResult.Entries[0].GetAttributeValue(beego.AppConfig.String("ldap::mail"))
+		ldapName := searchResult.Entries[0].GetAttributeValue(beego.AppConfig.String("ldap::name"))
+		err, u.Id = u.Reg(account, ldapMail, ldapName, password, password, ldapName)
+		if err != nil {
+			return params, totalRows, errors.New(fmt.Sprint("自动注册LDAP用户错误:%s", err.Error()))
+		}
+	}
+	return u.UserList(1, 1, "", "", "u.`account`=? ", account)
+}
+
+func (u *User) CheckLogin(account, password string) (params []orm.Params, totalRows int, err error) {
+	usr := u.GetUserField(orm.NewCondition().And("Email", account).Or("Account", account))
+	//1.Check Local Login
+	if usr.Id > 0 && strings.HasSuffix(strings.ToLower(usr.Account), "@local") {
+		return u.UserList(1, 1, "", "", "u.`account`=? and u.`password`=?", usr.Account, helper.MyMD5(password))
+	}
+	return usr.LDAPLogin(account, password)
 }

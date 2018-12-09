@@ -124,7 +124,7 @@ func RegisterDB() {
 	if envport := os.Getenv("MYSQL_PORT"); envport != "" {
 		dbPort = envport
 	}
-	dblink := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&loc=%v", dbUser, dbPassword, dbHost, dbPort, dbDatabase, dbCharset, "Asia%2FShanghai")
+	dblink := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s", dbUser, dbPassword, dbHost, dbPort, dbDatabase, dbCharset)
 	//下面两个参数后面要放到app.conf提供用户配置使用
 	// (可选)设置最大空闲连接
 	maxIdle := beego.AppConfig.DefaultInt("db::maxIdle", 50)

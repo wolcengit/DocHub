@@ -74,3 +74,39 @@ maxConn= 300
 
 
 ############ 数据库配置 end ############
+
+
+############ Active Directory/LDAP begin ############
+[ldap]
+
+#是否启用ldap
+enable=true
+
+#ldap主机名
+host=172.10.1.1
+
+#ldap端口 389 3268
+port=389
+
+#ldap内哪个属性作为用户名 sAMAccountName|userPrincipalName
+attribute=userPrincipalName
+
+#搜索范围
+base=dc=dochub,dc=local
+
+#第一次绑定ldap用户dn
+user=cn=ldapbind,cn=users,dc=dochub,dc=local
+
+#第一次绑定ldap用户密码
+password=P@ssw0rd
+
+#ldap搜索filter规则,如: AD服务器 objectClass=User, openldap服务器 objectClass=posixAccount
+filter=objectClass=User
+
+#ldap  显示名称
+name=displayName
+
+#ldap mail
+mail=mail
+
+############ Active Directory/LDAP end ############

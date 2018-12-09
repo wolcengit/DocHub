@@ -279,12 +279,14 @@ func (this *UserController) Login() {
 	}
 
 	ModelUser := models.NewUser()
-	users, rows, err := ModelUser.UserList(1, 1, "", "", "u.`email`=? and u.`password`=?", post.Email, helper.MyMD5(post.Password))
+	users, rows, err := ModelUser.CheckLogin(post.Email, post.Password)
 	if rows == 0 || err != nil {
 		if err != nil {
 			helper.Logger.Error(err.Error())
+			this.ResponseJson(false, "登录失败，"+err.Error())
+		} else {
+			this.ResponseJson(false, "登录失败，邮箱或密码不正确")
 		}
-		this.ResponseJson(false, "登录失败，邮箱或密码不正确")
 	}
 
 	user := users[0]
@@ -343,6 +345,7 @@ func (this *UserController) Reg() {
 	}
 	// 注册
 	err, uid := models.NewUser().Reg(
+		email,
 		email,
 		this.GetString("username"),
 		this.GetString("password"),

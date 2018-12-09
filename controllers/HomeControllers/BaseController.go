@@ -45,6 +45,10 @@ func (this *BaseController) Prepare() {
 	//this.Xsrf()//在有post表单的页面添加，避免每次都生成
 	//检测用户是否已经在cookie存在登录
 	this.checkCookieLogin()
+	if this.IsLogin <= 0 && this.Ctx.Request.RequestURI != "/user/login" {
+		this.Redirect("/user/login", 302)
+		return
+	}
 
 	//初始化
 	this.Data["LoginUid"] = this.IsLogin

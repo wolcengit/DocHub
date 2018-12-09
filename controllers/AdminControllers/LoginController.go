@@ -43,6 +43,9 @@ func (this *LoginController) Login() {
 			this.SetSession("AdminId", admin.Id)
 			this.ResponseJson(true, "登录成功")
 		} else {
+			if err != nil {
+				msg = err.Error()
+			}
 			this.ResponseJson(false, msg)
 		}
 	}
