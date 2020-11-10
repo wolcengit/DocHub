@@ -2,8 +2,9 @@
 
 # last is 3
 TAG="wolcen/dochub:2.1-Z$1"
-
-docker build -t $TAG .
-docker tag  $TAG  172.10.60.2/$TAG
-docker push  172.10.60.2/$TAG
+ALIYUN_TAG="registry.cn-hangzhou.aliyuncs.com/$TAG"
+sudo docker build -t $TAG .
+sudo docker push $TAG
+sudo docker tag $TAG $ALIYUN_TAG
+sudo docker push $ALIYUN_TAG
 
